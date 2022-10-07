@@ -1,0 +1,6 @@
+prune tests
+prune .github
+exclude .env
+exclude .gitignore
+exclude .python-version
+global-exclude *.py[cod]
