@@ -3,10 +3,10 @@ import asyncio
 from datetime import timedelta
 from functools import partial, update_wrapper, wraps
 from http import HTTPStatus
-from typing import Union
+from typing import Any, Union
 
-from fastapi import Response
 from extended_fastapi_redis_cache.client import FastApiRedisCache
+from extended_fastapi_redis_cache.enums import RedisEvent
 from extended_fastapi_redis_cache.util import (
     ONE_DAY_IN_SECONDS,
     ONE_HOUR_IN_SECONDS,
@@ -16,17 +16,21 @@ from extended_fastapi_redis_cache.util import (
     deserialize_json,
     serialize_json,
 )
+from fastapi import Response
 
 
 def cache(
     *, 
-    expire: Union[int, timedelta] = ONE_YEAR_IN_SECONDS, 
+    response_model: Any = None,
+    expire: Union[int, timedelta] = ONE_YEAR_IN_SECONDS,
     extend_expire_on_hit: bool = False,
     set_cache_header_values_on_hit: bool = True,
 ):
     """Enable caching behavior for the decorated function.
 
     Args:
+        response_model (Any, optional): The response model to use for serialization. Defaults to None.
+
         expire (Union[int, timedelta], optional): The number of seconds
             from now when the cached response should expire. Defaults to 31,536,000
             seconds (i.e., the number of seconds in one year).
@@ -109,6 +113,22 @@ def cache(
             response_data = await get_api_response_async(func, *args, **kwargs)
             ttl = calculate_ttl(expire)
 
+            if response_model is not None:
+                if not hasattr(response_model, "from_orm"):
+                    if response_model._name == "List":
+                        list_type = response_model.__args__[0]
+                        formatted_response_data = [list_type.from_orm(item) for item in response_data]
+                        response_data = formatted_response_data
+                    else:
+                        print("response_model must be a List - unhandled type provided")
+            
+                        redis_cache.log(
+                            RedisEvent.FAILED_TO_CACHE_KEY, 
+                            msg="response_model must be a List - unhandled type provided", 
+                            key=key
+                        )
+                        return response_data
+
             cached = redis_cache.add_to_cache(key, response_data, ttl)
 
             if cached:
@@ -128,6 +148,14 @@ def cache(
 
                 return response_data
 
+            print("Failed to cache response - inspect the logs for more information")
+            
+            redis_cache.log(
+                RedisEvent.FAILED_TO_CACHE_KEY, 
+                msg="Failed to cache response - inspect Response Model if it needs to be set!", 
+                key=key
+            )
+            
             return response_data
 
         return inner_wrapper
