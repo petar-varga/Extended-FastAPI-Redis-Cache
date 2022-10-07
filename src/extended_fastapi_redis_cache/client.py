@@ -1,12 +1,13 @@
 import logging
+import time
 from datetime import datetime, timedelta
 from typing import Callable, Dict, List, Optional, Tuple, Type, Union
 
-from fastapi import Request, Response
 from extended_fastapi_redis_cache.enums import RedisEvent, RedisStatus
 from extended_fastapi_redis_cache.key_gen import get_cache_key
 from extended_fastapi_redis_cache.redis import redis_connect
 from extended_fastapi_redis_cache.util import serialize_json
+from fastapi import Request, Response
 from redis import client
 
 DEFAULT_RESPONSE_HEADER = "X-FastAPI-Cache"
@@ -130,17 +131,40 @@ class FastApiRedisCache(metaclass=MetaSingleton):
         else:
             self.log(RedisEvent.FAILED_TO_EXTEND_KEY, key=key)
 
-    def expire_entire_router_cache(self, router: str, account_id: int, user_label: str = "current_user") -> None:
+    def expire_entire_router_cache(
+        self, 
+        router: str, 
+        account_id: int, 
+        user_label: str = "current_user",
+        log_time_execution: bool = False
+    ) -> None:
+        exp_msg = ""
+        if log_time_execution:
+            start = time.time()
         keys = self.redis.keys(f"{self.prefix}:api.routes.{router}*{user_label}={account_id}*")
         if keys:
             self.redis.delete(*keys)
-            self.log(RedisEvent.ENTIRE_ENDPOINT_CACHE_EXPIRED, msg=f"Router: {router}, account_id: {account_id}")
+            if log_time_execution:
+                exp_msg = f" - Expire operation took {(time.time() - start) * 1000} ms."
+            self.log(RedisEvent.ENTIRE_ENDPOINT_CACHE_EXPIRED, msg=f"Router: {router}, account_id: {account_id} {exp_msg}")
 
-    def expire_endpoint_cache(self, router: str, endpoint: str, account_id: int, user_label: str = "current_user") -> None:
+    def expire_endpoint_cache(
+        self, 
+        router: str, 
+        endpoint: str, 
+        account_id: int, 
+        user_label: str = "current_user",
+        log_time_execution: bool = False
+    ) -> None:
+        exp_msg = ""
+        if log_time_execution:
+            start = time.time()
         keys = self.redis.keys(f"{self.prefix}:api.routes.{router}.{endpoint}*{user_label}={account_id}*")
         if keys:
             self.redis.delete(*keys)
-            self.log(RedisEvent.EXPIRE_ENDPOINT_CACHE, msg=f"Expired single endpoint cache {router}.{endpoint}, account_id: {account_id}")
+            if log_time_execution:
+                exp_msg = f" - Expire operation took {(time.time() - start) * 1000} ms."
+            self.log(RedisEvent.EXPIRE_ENDPOINT_CACHE, msg=f"Expired single endpoint cache {router}.{endpoint}, account_id: {account_id} {exp_msg}")
 
     def set_response_headers(
         self, 
