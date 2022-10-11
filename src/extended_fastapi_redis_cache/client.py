@@ -141,7 +141,7 @@ class FastApiRedisCache(metaclass=MetaSingleton):
         exp_msg = ""
         if log_time_execution:
             start = time.time()
-        keys = self.redis.keys(f"{self.prefix}:api.routes.{router}*{user_label}={account_id}*")
+        keys = self.redis.keys(f"{self.prefix}:api.routes.{router}.*{user_label}={account_id}*")
         if keys:
             self.redis.delete(*keys)
             if log_time_execution:
